@@ -2423,13 +2423,10 @@ case "$host" in
         CheckOSS
         CheckDMEDIA
         CheckMME
-        CheckALSA
         CheckARTSC
         CheckESD
         CheckSndio
-        CheckPulseAudio
         CheckNAS
-        CheckX11
         CheckNANOX
         CheckFBCON
         CheckDirectFB
@@ -2451,6 +2448,8 @@ case "$host" in
         CheckClockGettime
         CheckLinuxVersion
         CheckRPATH
+        SDLMAIN_LDFLAGS="-static -static-libstdc++ -static-libgcc"
+        SDL_CFLAGS="$SDL_CFLAGS -static -static-libstdc++ -static-libgcc"
         # Set up files for the audio library
         if test x$enable_audio = xyes; then
           case $ARCH in

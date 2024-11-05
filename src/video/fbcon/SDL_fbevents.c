@@ -39,6 +39,7 @@
 #include <linux/vt.h>
 #include <linux/kd.h>
 #include <linux/keyboard.h>
+#include <linux/input.h>
 
 #include "SDL_timer.h"
 #include "SDL_mutex.h"
@@ -244,6 +245,7 @@ void FB_CloseKeyboard(_THIS)
 
 int FB_OpenKeyboard(_THIS)
 {
+#ifdef DONOTCOMPILE
 	/* Open only if not already opened */
  	if ( keyboard_fd < 0 ) {
 		static const char * const tty0[] = { "/dev/tty0", "/dev/vc/0", NULL };
@@ -301,6 +303,11 @@ int FB_OpenKeyboard(_THIS)
 		/* Set up keymap */
 		FB_vgainitkeymaps(keyboard_fd);
  	}
+#endif
+
+ 	keyboard_fd = open("/dev/keypad", O_RDWR);
+	fcntl(keyboard_fd, F_GETFL, 0);
+	fcntl(keyboard_fd, F_SETFL, 0 | O_NONBLOCK);
  	return(keyboard_fd);
 }
 
@@ -538,7 +545,7 @@ int FB_OpenMouse(_THIS)
 	int i;
 	const char *mousedev;
 	const char *mousedrv;
-
+#ifdef DONOTCOMPILE
 	mousedrv = SDL_getenv("SDL_MOUSEDRV");
 	mousedev = SDL_getenv("SDL_MOUSEDEV");
 	mouse_fd = -1;
@@ -692,6 +699,12 @@ fprintf(stderr, "Using (default) MS mouse on %s\n", mousedev);
 	if ( mouse_fd < 0 ) {
 		mouse_drv = MOUSE_NONE;
 	}
+
+#endif
+	mouse_fd = -1;
+
+	mouse_fd = open("/dev/tp", O_RDONLY | O_NONBLOCK);
+
 	return(mouse_fd);
 }
 
@@ -749,171 +762,45 @@ static void handle_tslib(_THIS)
 /* For now, use MSC, PS/2, and MS protocols
    Driver adapted from the SVGAlib mouse driver code (taken from gpm, etc.)
  */
+int dx, dy;
 static void handle_mouse(_THIS)
 {
-	static int start = 0;
-	static unsigned char mousebuf[BUFSIZ];
-	static int relative = 1;
-
-	int i, nread;
-	int button = 0;
-	int dx = 0, dy = 0;
-	int packetsize = 0;
-	int realx, realy;
+	int rd;
+	struct input_event ev0[64];
+	rd = read(mouse_fd, ev0, sizeof(struct input_event) * 64);
 	
-	/* Figure out the mouse packet size */
-	switch (mouse_drv) {
-		case MOUSE_NONE:
-			break;  /* carry on to read from device and discard it. */
-		case MOUSE_MSC:
-			packetsize = 5;
-			break;
-		case MOUSE_IMPS2:
-			packetsize = 4;
-			break;
-		case MOUSE_PS2:
-		case MOUSE_MS:
-		case MOUSE_BM:
-			packetsize = 3;
-			break;
-		case MOUSE_ELO:
-			/* try to read the next packet */
-			if(eloReadPosition(this, mouse_fd, &dx, &dy, &button, &realx, &realy)) {
-				button = (button & 0x01) << 2;
-				FB_vgamousecallback(button, 0, dx, dy);
-			}
-			return; /* nothing left to do */
-		case MOUSE_TSLIB:
-#if SDL_INPUT_TSLIB
-			handle_tslib(this);
-#endif
-			return; /* nothing left to do */
-		default:
-			/* Uh oh.. */
-			packetsize = 0;
-			break;
-	}
-
-	/* Special handling for the quite sensitive ELO controller */
-	if (mouse_drv == MOUSE_ELO) {
-	
-	}
-	
-	/* Read as many packets as possible */
-	nread = read(mouse_fd, &mousebuf[start], BUFSIZ-start);
-	if ( nread < 0 ) {
+	if (rd < (int)sizeof(struct input_event))
 		return;
-	}
 
-	if (mouse_drv == MOUSE_NONE) {
-		return;  /* we're done; just draining the input queue. */
-	}
-
-	nread += start;
-#ifdef DEBUG_MOUSE
-	fprintf(stderr, "Read %d bytes from mouse, start = %d\n", nread, start);
-#endif
-
-	for ( i=0; i<(nread-(packetsize-1)); i += packetsize ) {
-		switch (mouse_drv) {
-			case MOUSE_NONE: /* shouldn't actually hit this. */
-				break;  /* just throw everything away. */
-			case MOUSE_MSC:
-				/* MSC protocol has 0x80 in high byte */
-				if ( (mousebuf[i] & 0xF8) != 0x80 ) {
-					/* Go to next byte */
-					i -= (packetsize-1);
-					continue;
-				}
-				/* Get current mouse state */
-				button = (~mousebuf[i]) & 0x07;
-				dx =   (signed char)(mousebuf[i+1]) +
-				       (signed char)(mousebuf[i+3]);
-				dy = -((signed char)(mousebuf[i+2]) +
-				       (signed char)(mousebuf[i+4]));
-				break;
-			case MOUSE_PS2:
-				/* PS/2 protocol has nothing in high byte */
-				if ( (mousebuf[i] & 0xC0) != 0 ) {
-					/* Go to next byte */
-					i -= (packetsize-1);
-					continue;
-				}
-				/* Get current mouse state */
-				button = (mousebuf[i] & 0x04) >> 1 | /*Middle*/
-		  			 (mousebuf[i] & 0x02) >> 1 | /*Right*/
-		  			 (mousebuf[i] & 0x01) << 2;  /*Left*/
-		  		dx = (mousebuf[i] & 0x10) ?
-		  		      mousebuf[i+1] - 256 : mousebuf[i+1];
-		  		dy = (mousebuf[i] & 0x20) ?
-		  		      -(mousebuf[i+2] - 256) : -mousebuf[i+2];
-				break;
-			case MOUSE_IMPS2:
-				/* Get current mouse state */
-				button = (mousebuf[i] & 0x04) >> 1 | /*Middle*/
-		  			 (mousebuf[i] & 0x02) >> 1 | /*Right*/
-		  			 (mousebuf[i] & 0x01) << 2 | /*Left*/
-		  			 (mousebuf[i] & 0x40) >> 3 | /* 4 */
-		  			 (mousebuf[i] & 0x80) >> 3;  /* 5 */
-		  		dx = (mousebuf[i] & 0x10) ?
-		  		      mousebuf[i+1] - 256 : mousebuf[i+1];
-		  		dy = (mousebuf[i] & 0x20) ?
-		  		      -(mousebuf[i+2] - 256) : -mousebuf[i+2];
-				switch (mousebuf[i+3]&0x0F) {
-				    case 0x0E: /* DX = +1 */
-				    case 0x02: /* DX = -1 */
-					break;
-				    case 0x0F: /* DY = +1 (map button 4) */
-                                       FB_vgamousecallback(button | (1<<3),
-                                                           1, 0, 0);
-					break;
-				    case 0x01: /* DY = -1 (map button 5) */
-                                       FB_vgamousecallback(button | (1<<4),
-                                                           1, 0, 0);
-					break;
-				}
-				break;
-			case MOUSE_MS:
-				/* Microsoft protocol has 0x40 in high byte */
-				if ( (mousebuf[i] & 0x40) != 0x40 ) {
-					/* Go to next byte */
-					i -= (packetsize-1);
-					continue;
-				}
-				/* Get current mouse state */
-				button = ((mousebuf[i] & 0x20) >> 3) |
-				         ((mousebuf[i] & 0x10) >> 4);
-				dx = (signed char)(((mousebuf[i] & 0x03) << 6) |
-				                   (mousebuf[i + 1] & 0x3F));
-				dy = (signed char)(((mousebuf[i] & 0x0C) << 4) |
-				                    (mousebuf[i + 2] & 0x3F));
-				break;
-			case MOUSE_BM:
-				/* BusMouse protocol has 0xF8 in high byte */
-				if ( (mousebuf[i] & 0xF8) != 0x80 ) {
-					/* Go to next byte */
-					i -= (packetsize-1);
-					continue;
-				}
-				/* Get current mouse state */
-				button = (~mousebuf[i]) & 0x07;
-				dx =  (signed char)mousebuf[i+1];
-				dy = -(signed char)mousebuf[i+2];
-				break;
-			default:
-				/* Uh oh.. */
-				dx = 0;
-				dy = 0;
-				break;
+	int button = 0;
+	int i = 0;
+	for (i = 0; i < rd / (int)sizeof(struct input_event); i++)
+	{
+		//printf("event(%d): type: %d code: %3d value: %3d x: %3d y: %3d\n", i, ev0[i].type, ev0[i].code, ev0[i].value, dx, dy);
+		if (ev0[i].type == 3 && ev0[i].code == ABS_X)
+		{
+			dx = ev0[i].value;
 		}
-		FB_vgamousecallback(button, relative, dx, dy);
+		else if (ev0[i].type == 3 && ev0[i].code == ABS_Y)
+		{
+			dy = ev0[i].value;
+		}
+
+		if (ev0[i].type == 1 && ev0[i].code == 330)
+		{
+			button = ev0[i].value << 2;
+			//button << 2;	/* must report it as button 3 */
+			
+		}
 	}
-	if ( i < nread ) {
-		SDL_memcpy(mousebuf, &mousebuf[i], (nread-i));
-		start = (nread-i);
-	} else {
-		start = 0;
-	}
+	
+	if (dx == 0 || dy == 0)
+		return;
+	
+	FB_vgamousecallback(button, 0, dx, dy);
+	//printf("%d %d %d\n", dx, dy, button);
+	//fflush(stdout);
+	
 	return;
 }
 
@@ -988,42 +875,31 @@ static void handle_keyboard(_THIS)
 	int scancode;
 	SDL_keysym keysym;
 
-	nread = read(keyboard_fd, keybuf, BUFSIZ);
-	for ( i=0; i<nread; ++i ) {
-		scancode = keybuf[i] & 0x7F;
-		if ( keybuf[i] & 0x80 ) {
-			pressed = SDL_RELEASED;
-		} else {
-			pressed = SDL_PRESSED;
-		}
-		TranslateKey(scancode, &keysym);
-		/* Handle Ctrl-Alt-FN for vt switch */
-		switch (keysym.sym) {
-		    case SDLK_F1:
-		    case SDLK_F2:
-		    case SDLK_F3:
-		    case SDLK_F4:
-		    case SDLK_F5:
-		    case SDLK_F6:
-		    case SDLK_F7:
-		    case SDLK_F8:
-		    case SDLK_F9:
-		    case SDLK_F10:
-		    case SDLK_F11:
-		    case SDLK_F12:
-			if ( (SDL_GetModState() & KMOD_CTRL) &&
-			     (SDL_GetModState() & KMOD_ALT) ) {
-				if ( pressed ) {
-					switch_vt(this, (keysym.sym-SDLK_F1)+1);
-				}
-				break;
-			}
-			/* Fall through to normal processing */
-		    default:
-			posted += SDL_PrivateKeyboard(pressed, &keysym);
-			break;
-		}
+	struct input_event ev0;
+	int rd;
+	rd = read(keyboard_fd, &ev0, sizeof(struct input_event));
+
+	if (rd < (int)sizeof(struct input_event))
+		return;
+
+	if (ev0.type != 1)
+	{
+		if(ev0.value != 0 && ev0.value != 1)
+			return;
 	}
+
+	if (ev0.value == 1)
+	{
+		pressed = SDL_PRESSED;
+		TranslateKey(ev0.code, &keysym);
+	}
+	else
+	{
+		pressed = SDL_RELEASED;
+	}
+	
+	posted += SDL_PrivateKeyboard(pressed, &keysym);
+
 }
 
 void FB_PumpEvents(_THIS)

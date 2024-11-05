@@ -1,3 +1,17 @@
+# SDL 1.2 PAX
+
+***Beware: this modification is not done properly and might annoy anyone with real programming knowledge***
+
+SDL-1.2 fork with necessary modifications for PAX terminals and ProlinOS
+Includes halfassed keypad support and touchscreen (mouse emulation) support
+
+Build info:
+* requires correctly set paths to arm-2012.03 toolchain
+* './configure --host=arm-none-linux-gnueabi'
+* 'make'
+
+and pushing:
+* 'python3 <prolin-xcb-client/client.py path> <tty> push build/.libs/libSDL-1.2.so.0.11.5 /data/app/MAINAPP/lib/libSDL-1.2.so.0'
 
 # DEPRECATED
 
