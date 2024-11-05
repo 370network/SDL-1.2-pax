@@ -7,11 +7,11 @@ Includes halfassed keypad support and touchscreen (mouse emulation) support
 
 Build info:
 * requires correctly set paths to arm-2012.03 toolchain
-* './configure --host=arm-none-linux-gnueabi'
-* 'make'
+* `./configure --host=arm-none-linux-gnueabi`
+* `make`
 
 and pushing:
-* 'python3 <prolin-xcb-client/client.py path> <tty> push build/.libs/libSDL-1.2.so.0.11.5 /data/app/MAINAPP/lib/libSDL-1.2.so.0'
+* `python3 <prolin-xcb-client/client.py> <tty> push build/.libs/libSDL-1.2.so.0.11.5 /data/app/MAINAPP/lib/libSDL-1.2.so.0`
 
 # DEPRECATED
 
