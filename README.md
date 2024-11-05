@@ -13,6 +13,14 @@ Build info:
 and pushing:
 * `python3 <prolin-xcb-client/client.py> <tty> push build/.libs/libSDL-1.2.so.0.11.5 /data/app/MAINAPP/lib/libSDL-1.2.so.0`
 
+Usage in ports:
+```c
+SDL_putenv("SDL_VIDEODRIVER=fbcon");
+SDL_putenv("SDL_FBDEV=/dev/fb");
+SDL_putenv("SDL_AUDIODRIVER=dsp");
+SDL_putenv("SDL_PATH_DSP=/dev/snd/dsp");
+```
+
 # DEPRECATED
 
 The 1.2 branch of SDL is deprecated. While we occasionally collect fixes
