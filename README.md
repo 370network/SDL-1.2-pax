@@ -2,8 +2,7 @@
 
 ***Beware: this modification is not done properly and might annoy anyone with real programming knowledge***
 
-SDL-1.2 fork with necessary modifications for PAX terminals and ProlinOS
-Includes halfassed keypad support and touchscreen (mouse emulation) support
+SDL-1.2 fork with necessary modifications for PAX terminals and ProlinOS. Includes halfassed keypad support and touchscreen (mouse emulation) support
 
 Build info:
 * requires correctly set paths to arm-2012.03 toolchain
